@@ -1,0 +1,24 @@
+services:
+  iptvboss:
+    image: "${IPTVBOSS_IMAGE:-iptvboss-xcserver}:${IPTVBOSS_VERSION}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        IPTVBOSS_VERSION: "${IPTVBOSS_VERSION:?Set IPTVBOSS_VERSION in .env}"
+        IPTVBOSS_RELEASE_REPOSITORY: "${IPTVBOSS_RELEASE_REPOSITORY:-walrusone/iptvboss-alpha}"
+        IPTVBOSS_SHA256_AMD64: "${IPTVBOSS_SHA256_AMD64:?Set IPTVBOSS_SHA256_AMD64 in .env}"
+        IPTVBOSS_SHA256_ARM64: "${IPTVBOSS_SHA256_ARM64:?Set IPTVBOSS_SHA256_ARM64 in .env}"
+    restart: unless-stopped
+    stop_grace_period: 60s
+    ports:
+      - "${IPTVBOSS_HOST_PORT:-8001}:8001"
+    volumes:
+      - iptvboss-data:/data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  iptvboss-data:
