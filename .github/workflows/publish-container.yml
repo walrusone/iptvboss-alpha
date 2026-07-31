@@ -1,6 +1,9 @@
 name: Publish XC Server Container
 
 on:
+  release:
+    types: [published]
+
   workflow_dispatch:
     inputs:
       version:
@@ -33,23 +36,26 @@ jobs:
         id: release
         shell: bash
         env:
-          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_TAG: ${{ github.event.release.tag_name || inputs.version }}
         run: |
           set -euo pipefail
 
-          if [[ ! "${REQUESTED_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.]+)?$ ]]; then
-            echo "Invalid version: ${REQUESTED_VERSION}" >&2
+          release_tag="${REQUESTED_TAG}"
+          version="${release_tag#v}"
+
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.]+)?$ ]]; then
+            echo "Invalid version: ${version}" >&2
             exit 1
           fi
 
-          release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${REQUESTED_VERSION}"
-          amd64_asset="iptvboss-${REQUESTED_VERSION}-linux-amd64.tar.gz"
-          arm64_asset="iptvboss-${REQUESTED_VERSION}-linux-aarch64.tar.gz"
+          release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
+          amd64_asset="iptvboss-${version}-linux-amd64.tar.gz"
+          arm64_asset="iptvboss-${version}-linux-aarch64.tar.gz"
 
-          curl --fail --location --retry 3 \
+          curl --fail --location --retry 30 --retry-delay 10 --retry-all-errors \
             --output "${RUNNER_TEMP}/${amd64_asset}" \
             "${release_url}/${amd64_asset}"
-          curl --fail --location --retry 3 \
+          curl --fail --location --retry 30 --retry-delay 10 --retry-all-errors \
             --output "${RUNNER_TEMP}/${arm64_asset}" \
             "${release_url}/${arm64_asset}"
 
@@ -61,7 +67,7 @@ jobs:
           amd64_sha256=$(sha256sum "${RUNNER_TEMP}/${amd64_asset}" | cut -d ' ' -f 1)
           arm64_sha256=$(sha256sum "${RUNNER_TEMP}/${arm64_asset}" | cut -d ' ' -f 1)
 
-          echo "version=${REQUESTED_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "amd64_sha256=${amd64_sha256}" >> "${GITHUB_OUTPUT}"
           echo "arm64_sha256=${arm64_sha256}" >> "${GITHUB_OUTPUT}"
 
