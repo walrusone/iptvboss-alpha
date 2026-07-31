@@ -1,0 +1,17 @@
+services:
+  iptvboss:
+    image: "ghcr.io/walrusone/iptvboss-alpha:${IPTVBOSS_TAG:-alpha}"
+    pull_policy: always
+    restart: unless-stopped
+    stop_grace_period: 60s
+    ports:
+      - "${IPTVBOSS_HOST_PORT:-8001}:8001"
+    volumes:
+      - iptvboss-data:/data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  iptvboss-data:
