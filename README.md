@@ -11,6 +11,11 @@ The moving `alpha` tag follows the newest container published from this Alpha
 release feed. Version tags such as `3.11.21` are intended for pinned
 deployments.
 
+Each time Conveyor publishes a GitHub release containing the amd64 and arm64
+Linux tarballs, GitHub Actions automatically verifies those assets and
+publishes the corresponding multi-platform container. Maintainers can rerun a
+missed or failed publication from **Actions → Publish XC Server Container**.
+
 ## Run with Docker Compose
 
 Download `compose.yaml` and `.env.example`, then run:
