@@ -32,6 +32,22 @@ bootstrap mode and presents the restore/setup page.
 All databases, configuration, XC files, caches, and logs are stored in the
 named volume `iptvboss-data`.
 
+### Use a host directory with a custom user
+
+The container defaults to UID/GID `10001:10001`. For a bind-mounted directory,
+set `IPTVBOSS_UID` and `IPTVBOSS_GID` in `.env` to the host user and group that
+should own the data. This is useful for Unraid shares, for example:
+
+```env
+IPTVBOSS_UID=99
+IPTVBOSS_GID=100
+```
+
+The host directory mapped to `/data` must already exist and be writable by
+that UID/GID. Changing these values for an existing named volume may require
+correcting the volume's ownership first. Keep the container non-root whenever
+possible.
+
 ## Pin a version
 
 For a long-running deployment, edit `.env` and replace `alpha` with an exact
