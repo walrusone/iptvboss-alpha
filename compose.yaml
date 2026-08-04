@@ -4,6 +4,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     stop_grace_period: 60s
+    user: "${IPTVBOSS_UID:-10001}:${IPTVBOSS_GID:-10001}"
     ports:
       - "${IPTVBOSS_HOST_PORT:-8001}:8001"
     volumes:
