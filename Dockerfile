@@ -61,6 +61,6 @@ VOLUME ["/data"]
 EXPOSE 8001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-    CMD curl --fail --silent --show-error http://127.0.0.1:8001/boss.php/bootstrap/status >/dev/null || exit 1
+    CMD curl --fail --silent --show-error http://127.0.0.1:8001/healthz >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/opt/iptvboss/bin/iptvboss-c", "-xcserver", "-directory", "/data"]
