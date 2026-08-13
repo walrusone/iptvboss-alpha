@@ -26,22 +26,29 @@ docker compose up --detach
 docker compose logs --follow iptvboss
 ```
 
-Compose defaults to proxy mode and an all-interface listener inside the
-container. In the HTTPS reverse proxy, select `http`, enter the Docker server's
+Compose defaults to direct HTTP and an all-interface listener inside the
+container. This is intended for local-network setup and displays a security
+warning in the console and process logs. Direct HTTP must not be
+Internet-facing.
+
+To use an HTTPS reverse proxy, set `IPTVBOSS_XC_BEHIND_HTTPS_PROXY=true`. In
+the proxy, select `http`, enter the Docker server's
 address as the forward hostname/IP, and enter `8001` as the forward port. The
 proxy must send `X-Forwarded-Proto: https`. Open the proxy's HTTPS URL with
 `/boss.php` appended to create the administrator and complete bootstrap.
 
-For an isolated or temporary direct connection, set both values:
+Direct HTTPS is also available with:
 
 ```env
 IPTVBOSS_XC_BEHIND_HTTPS_PROXY=false
-IPTVBOSS_XC_ALLOW_DIRECT_HTTP=true
+IPTVBOSS_HTTPS_ONLY=true
+IPTVBOSS_XC_KEYSTORE_PASSWORD=replace-with-keystore-password
 ```
 
-Direct HTTP is unencrypted and must not be Internet-facing. Access mode and
-listener scope are independent. `IPTVBOSS_XC_BIND_ADDRESS` accepts `all` or
-`loopback`; normal bridge networking requires `all`.
+Place `keystore.jks` in `/data`. Proxy mode takes precedence and does not use
+the keystore. Access mode and listener scope are independent.
+`IPTVBOSS_XC_BIND_ADDRESS` accepts `all` or `loopback`; normal bridge
+networking requires `all`.
 
 Authentication limits automatically use the forwarded client address instead
 of treating the proxy container as one client. Restrict proxy headers to known
