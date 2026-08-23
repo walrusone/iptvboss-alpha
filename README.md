@@ -1,144 +1,124 @@
-# IPTVBoss Alpha XC Server container
+# IPTVBoss XC Server container
 
-This repository publishes the headless IPTVBoss Alpha XC server for amd64 and
-arm64:
+This repository publishes the headless IPTVBoss XC Server for amd64 and arm64. The current pre-release image is:
 
 ```text
 ghcr.io/walrusone/iptvboss-alpha
 ```
 
-The moving `alpha` tag follows the newest container published from this Alpha
-release feed. Version tags such as `3.11.21` are intended for pinned
-deployments.
+Version tags such as `3.11.21` are intended for pinned deployments. The moving `alpha` tag follows the newest container published in the current channel.
 
-Each time Conveyor publishes a GitHub release containing the amd64 and arm64
-Linux tarballs, GitHub Actions automatically verifies those assets and
-publishes the corresponding multi-platform container. Maintainers can rerun a
-missed or failed publication from **Actions → Publish XC Server Container**.
+## Recommended Compose setup
 
-## Run with Docker Compose
+Download these files into one directory:
 
-Download `compose.yaml` and `.env.example`, then run:
+- `compose.yaml`
+- `.env.example`
+- `Caddyfile`
+
+Copy the environment example and edit it:
 
 ```sh
 cp .env.example .env
-docker compose up --detach
-docker compose logs --follow iptvboss
+nano .env
 ```
 
-Compose defaults to direct HTTP and an all-interface listener inside the
-container. This is intended for local-network setup and displays a security
-warning in the console and process logs. Direct HTTP must not be
-Internet-facing.
+Set `IPTVBOSS_DOMAIN` to a public hostname whose DNS points to this server. The default `COMPOSE_PROFILES=caddy` starts a bundled Caddy reverse proxy on ports `80` and `443` and keeps IPTVBoss port `8001` on host loopback.
 
-To use an HTTPS reverse proxy, set `IPTVBOSS_XC_BEHIND_HTTPS_PROXY=true`. In
-the proxy, select `http`, enter the Docker server's
-address as the forward hostname/IP, and enter `8001` as the forward port. The
-proxy must send `X-Forwarded-Proto: https`. Open the proxy's HTTPS URL with
-`/boss.php` appended to create the administrator and complete bootstrap.
+Start the stack:
 
-Direct HTTPS is also available with:
+```sh
+docker compose config
+docker compose pull
+docker compose up --detach
+docker compose ps
+docker compose logs --follow
+```
+
+Open `https://your-hostname/boss.php`. On a new data volume, the first visitor creates the administrator and completes bootstrap.
+
+The bundled Caddy setup requires the hostname's DNS records to point to this server and inbound TCP ports `80` and `443` to reach it. UDP `443` is also published for HTTP/3.
+
+## Use an existing proxy on the Docker host
+
+If an HTTPS reverse proxy already runs directly on the Docker host, clear the profile value in `.env`:
 
 ```env
+COMPOSE_PROFILES=
+```
+
+Configure that proxy to use this upstream:
+
+```text
+http://127.0.0.1:8001
+```
+
+The proxy must send `X-Forwarded-Proto: https`. Keep proxy mode enabled:
+
+```env
+IPTVBOSS_XC_BEHIND_HTTPS_PROXY=true
+IPTVBOSS_HTTPS_ONLY=false
+IPTVBOSS_HOST_IP=127.0.0.1
+```
+
+A proxy in another container has separate loopback networking. Attach it to a shared user-defined network and use `http://iptvboss:8001`, or publish the backend on a private host address protected by a firewall. Do not expose direct HTTP port `8001` to the Internet.
+
+## Data and backups
+
+IPTVBoss databases, configuration, generated XC files, caches, and logs are stored in the named `iptvboss-data` volume. Caddy uses separate `caddy-data` and `caddy-config` volumes.
+
+Stop IPTVBoss briefly and copy its data to a dated directory before upgrades:
+
+```sh
+mkdir -p backups/2026-08-23
+docker compose stop iptvboss
+docker compose cp --archive iptvboss:/data/. ./backups/2026-08-23/
+docker compose start iptvboss
+```
+
+Do not run `docker compose down --volumes` unless all persistent IPTVBoss and Caddy data should be deleted.
+
+## Update or pin a version
+
+The image repository and tag are configured independently so a future release channel can be selected without editing `compose.yaml`:
+
+```env
+IPTVBOSS_IMAGE=ghcr.io/walrusone/iptvboss-alpha
+IPTVBOSS_TAG=alpha
+```
+
+For a controlled deployment, replace the tag with an exact tested version. After making a backup:
+
+```sh
+docker compose pull
+docker compose up --detach
+```
+
+If a rollback is necessary, restore the matching pre-upgrade data backup before starting an older image when its database schema may differ.
+
+## Advanced settings
+
+The container defaults to non-root UID/GID `10001:10001`. Change `IPTVBOSS_UID` and `IPTVBOSS_GID` only when a bind-mounted host directory requires another owner.
+
+When the published backend can be reached by untrusted peers, restrict forwarded headers to the real proxy peer addresses or CIDRs:
+
+```env
+IPTVBOSS_XC_TRUSTED_PROXIES=172.20.0.0/16,127.0.0.1/32
+```
+
+Docker address translation can make the peer appear as a bridge gateway. Use the rejected-peer address reported by IPTVBoss and include every trusted proxy hop.
+
+Direct HTTPS is available for installations that cannot use a reverse proxy. Disable Caddy, disable proxy mode, enable HTTPS, and mount a valid PKCS#12 store at `/data/keystore.p12`:
+
+```env
+COMPOSE_PROFILES=
 IPTVBOSS_XC_BEHIND_HTTPS_PROXY=false
 IPTVBOSS_HTTPS_ONLY=true
 IPTVBOSS_XC_KEYSTORE_PASSWORD=replace-with-keystore-password
-```
-
-Place `keystore.jks` in `/data`. Proxy mode takes precedence and does not use
-the keystore. Access mode and listener scope are independent.
-`IPTVBOSS_XC_BIND_ADDRESS` accepts `all` or `loopback`; normal bridge
-networking requires `all`.
-
-Authentication limits automatically use the forwarded client address instead
-of treating the proxy container as one client. Restrict proxy headers to known
-peers with a comma-separated IP/CIDR allowlist:
-
-```env
-IPTVBOSS_XC_TRUSTED_PROXIES=172.17.0.6/32,127.0.0.1/32
-```
-
-Configure this allowlist whenever the published port is reachable by untrusted
-peers. Cross-bridge traffic through the Docker host may appear from a gateway
-address, so use the peer reported by IPTVBoss. Include every trusted proxy
-network when another proxy sits in front of Nginx Proxy Manager.
-
-All databases, configuration, XC files, caches, and logs are stored in the
-named volume `iptvboss-data`.
-
-### Use a host directory with a custom user
-
-The container defaults to UID/GID `10001:10001`. For a bind-mounted directory,
-set `IPTVBOSS_UID` and `IPTVBOSS_GID` in `.env` to the host user and group that
-should own the data. This is useful for Unraid shares, for example:
-
-```env
-IPTVBOSS_UID=99
-IPTVBOSS_GID=100
-```
-
-The host directory mapped to `/data` must already exist and be writable by
-that UID/GID. Changing these values for an existing named volume may require
-correcting the volume's ownership first. Keep the container non-root whenever
-possible.
-
-## Pin a version
-
-For a long-running deployment, edit `.env` and replace `alpha` with an exact
-published version:
-
-```env
-IPTVBOSS_TAG=3.11.21
-```
-
-Then update the service:
-
-```sh
-docker compose pull
-docker compose up --detach
-```
-
-## Configure listener and published port
-
-IPTVBoss listens on port 8001 inside the container. To publish another host
-port, edit `.env`:
-
-```env
-IPTVBOSS_HOST_PORT=8080
-```
-
-`IPTVBOSS_XC_BIND_ADDRESS` controls the listener inside the container;
-`IPTVBOSS_HOST_IP` controls which host interface publishes it. Common Unraid
-setups with Nginx Proxy Manager on a separate bridge use:
-
-```env
-IPTVBOSS_XC_BIND_ADDRESS=all
 IPTVBOSS_HOST_IP=0.0.0.0
 ```
 
-A host-local proxy can set `IPTVBOSS_HOST_IP=127.0.0.1`. Two containers merely
-attached to the same bridge do not share loopback. When both services share a
-user-defined bridge, use `http://iptvboss:8001` and remove the published port
-when practical. A restored database must still use internal XC port 8001.
-
-## Stop, upgrade, and back up
-
-Stop the service without deleting its data:
-
-```sh
-docker compose down
-```
-
-Back up the `iptvboss-data` volume before changing versions. Do not use
-`docker compose down --volumes` unless the persistent IPTVBoss data should be
-deleted.
-
-To follow the newest Alpha after it is published:
-
-```sh
-docker compose pull
-docker compose up --detach
-```
+The password unlocks the TLS private-key store only. It does not encrypt IPTVBoss data. Proxy mode takes precedence and does not use the keystore.
 
 ## Pull without Compose
 
