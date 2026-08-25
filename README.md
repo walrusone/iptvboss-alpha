@@ -8,13 +8,12 @@ ghcr.io/walrusone/iptvboss-alpha
 
 Version tags such as `3.11.21` are intended for pinned deployments. The moving `alpha` tag follows the newest container published in the current channel.
 
-## Recommended Compose setup
+## Standalone Compose setup
 
 Download these files into one directory:
 
 - `compose.yaml`
 - `.env.example`
-- `Caddyfile`
 
 Copy the environment example and edit it:
 
@@ -23,7 +22,16 @@ cp .env.example .env
 nano .env
 ```
 
-Set `IPTVBOSS_DOMAIN` to a public hostname whose DNS points to this server. The default `COMPOSE_PROFILES=caddy` starts a bundled Caddy reverse proxy on ports `80` and `443` and keeps IPTVBoss port `8001` on host loopback.
+The default configuration runs only IPTVBoss and publishes unencrypted HTTP on port `8001` for access from a trusted local network:
+
+```env
+IPTVBOSS_HOST_IP=0.0.0.0
+IPTVBOSS_HOST_PORT=8001
+IPTVBOSS_XC_BEHIND_HTTPS_PROXY=false
+IPTVBOSS_HTTPS_ONLY=false
+```
+
+Do not forward port `8001` from the Internet. Use a private host address instead of `0.0.0.0` when IPTVBoss should listen on only one network interface.
 
 Start the stack:
 
@@ -35,19 +43,64 @@ docker compose ps
 docker compose logs --follow
 ```
 
-Open `https://your-hostname/boss.php`. On a new data volume, the first visitor creates the administrator and completes bootstrap.
+Open `http://server-private-ip:8001/boss.php`. On a new data volume, the first visitor creates the administrator and completes bootstrap.
 
-The bundled Caddy setup requires the hostname's DNS records to point to this server and inbound TCP ports `80` and `443` to reach it. UDP `443` is also published for HTTP/3.
+## Bundle Caddy in the same Compose file
+
+For public HTTPS, download `Caddyfile` beside `compose.yaml`. Point a public hostname's DNS records to the Docker host and ensure inbound TCP ports `80` and `443` reach it. UDP port `443` is optional for HTTP/3.
+
+Change or add these values in `.env`:
+
+```env
+IPTVBOSS_DOMAIN=boss.example.com
+IPTVBOSS_HOST_IP=127.0.0.1
+IPTVBOSS_XC_BEHIND_HTTPS_PROXY=true
+```
+
+Add the `caddy` service under `services` in `compose.yaml`, aligned with the existing `iptvboss` service:
+
+```yaml
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      IPTVBOSS_DOMAIN: "${IPTVBOSS_DOMAIN:-boss.domain.com}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      iptvboss:
+        condition: service_healthy
+```
+
+Add the Caddy volumes to the existing `volumes` section:
+
+```yaml
+volumes:
+  iptvboss-data:
+  caddy-data:
+  caddy-config:
+```
+
+Validate and apply the expanded stack:
+
+```sh
+docker compose config
+docker compose pull
+docker compose up --detach
+docker compose ps
+```
+
+Both services should be running. Open `https://boss.example.com/boss.php` after Caddy obtains its certificate. Binding IPTVBoss to host loopback prevents clients from bypassing Caddy over unencrypted HTTP.
 
 ## Use an existing proxy on the Docker host
 
-If an HTTPS reverse proxy already runs directly on the Docker host, clear the profile value in `.env`:
-
-```env
-COMPOSE_PROFILES=
-```
-
-Configure that proxy to use this upstream:
+If an HTTPS reverse proxy already runs directly on the Docker host, configure it to use this upstream:
 
 ```text
 http://127.0.0.1:8001
@@ -65,7 +118,7 @@ A proxy in another container has separate loopback networking. Attach it to a sh
 
 ## Data and backups
 
-IPTVBoss databases, configuration, generated XC files, caches, and logs are stored in the named `iptvboss-data` volume. Caddy uses separate `caddy-data` and `caddy-config` volumes.
+IPTVBoss databases, configuration, generated XC files, caches, and logs are stored in the named `iptvboss-data` volume. When bundled Caddy is added, it uses separate `caddy-data` and `caddy-config` volumes.
 
 Stop IPTVBoss briefly and copy its data to a dated directory before upgrades:
 
@@ -76,7 +129,7 @@ docker compose cp --archive iptvboss:/data/. ./backups/2026-08-23/
 docker compose start iptvboss
 ```
 
-Do not run `docker compose down --volumes` unless all persistent IPTVBoss and Caddy data should be deleted.
+Do not run `docker compose down --volumes` unless all persistent data managed by the stack should be deleted.
 
 ## Update or pin a version
 
@@ -108,10 +161,9 @@ IPTVBOSS_XC_TRUSTED_PROXIES=172.20.0.0/16,127.0.0.1/32
 
 Docker address translation can make the peer appear as a bridge gateway. Use the rejected-peer address reported by IPTVBoss and include every trusted proxy hop.
 
-Direct HTTPS is available for installations that cannot use a reverse proxy. Disable Caddy, disable proxy mode, enable HTTPS, and mount a valid PKCS#12 store at `/data/keystore.p12`:
+Direct HTTPS is available for installations that cannot use a reverse proxy. Disable proxy mode, enable HTTPS, and mount a valid PKCS#12 store at `/data/keystore.p12`:
 
 ```env
-COMPOSE_PROFILES=
 IPTVBOSS_XC_BEHIND_HTTPS_PROXY=false
 IPTVBOSS_HTTPS_ONLY=true
 IPTVBOSS_XC_KEYSTORE_PASSWORD=replace-with-keystore-password
