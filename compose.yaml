@@ -6,13 +6,13 @@ services:
     stop_grace_period: 60s
     user: "${IPTVBOSS_UID:-10001}:${IPTVBOSS_GID:-10001}"
     environment:
-      IPTVBOSS_XC_BEHIND_HTTPS_PROXY: "${IPTVBOSS_XC_BEHIND_HTTPS_PROXY:-true}"
+      IPTVBOSS_XC_BEHIND_HTTPS_PROXY: "${IPTVBOSS_XC_BEHIND_HTTPS_PROXY:-false}"
       IPTVBOSS_HTTPS_ONLY: "${IPTVBOSS_HTTPS_ONLY:-false}"
       IPTVBOSS_XC_KEYSTORE_PASSWORD: "${IPTVBOSS_XC_KEYSTORE_PASSWORD:-}"
       IPTVBOSS_XC_BIND_ADDRESS: "${IPTVBOSS_XC_BIND_ADDRESS:-all}"
       IPTVBOSS_XC_TRUSTED_PROXIES: "${IPTVBOSS_XC_TRUSTED_PROXIES:-}"
     ports:
-      - "${IPTVBOSS_HOST_IP:-127.0.0.1}:${IPTVBOSS_HOST_PORT:-8001}:8001"
+      - "${IPTVBOSS_HOST_IP:-0.0.0.0}:${IPTVBOSS_HOST_PORT:-8001}:8001"
     volumes:
       - iptvboss-data:/data
     cap_drop:
@@ -20,26 +20,5 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  caddy:
-    image: caddy:2-alpine
-    profiles:
-      - caddy
-    restart: unless-stopped
-    environment:
-      IPTVBOSS_DOMAIN: "${IPTVBOSS_DOMAIN:-boss.domain.com}"
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      iptvboss:
-        condition: service_healthy
-
 volumes:
   iptvboss-data:
-  caddy-data:
-  caddy-config:
